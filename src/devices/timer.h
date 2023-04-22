@@ -4,7 +4,7 @@
 #include <round.h>
 #include <stdint.h>
 #include <debug.h> /*mariam*/
-#include<stdbool.h> /*mariam*/
+#include<stdbool.h> /*mariam*//////
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
