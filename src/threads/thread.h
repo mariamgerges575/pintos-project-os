@@ -4,7 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "synch.h"
+#include "fixed-point.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -89,13 +90,21 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+   //maro
+   int64_t ticks_sleep;
+   struct list_elem sleep_elem;
+   //maro
+
+   //patrick
+   int base_priority;                  /*for priority donation*/
+   struct list locks_holding;          /*list of locks the thread is holding*/
+   struct list *lock_waitingfor;       /*list of locks the thread is waiting for*/
+   fixed_t recent_cpu;                     /*recent cpu value that the advanced scheduler needs to know*/
+   int nice;                           /*nice value that the advanced scheduler needs to calculate thread's priority*/         
+   //patrick
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */ //for readylist
-    
-    struct list_elem sleep_elem;     /*mariam*/
-    int64_t ticks_sleep;   /*mariam*/
-
+    struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -111,10 +120,8 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-bool less_priority(struct list_elem *a_,struct list_elem *b_,void *aux UNUSED); /*mariam*/
-bool max_util(struct list_elem *a,struct list_elem *b ,void *aux UNUSED);    /*mariam*/
 
-
+void checkInvoke(struct thread *t, void *aux UNUSED);
 void thread_init (void);
 void thread_start (void);
 
@@ -140,10 +147,24 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+//patrick
+bool thread_cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void thread_donate_priority(struct thread *t);
+void thread_hold_lock(struct lock *lock);
+void thread_remove_lock(struct lock *lock);
+bool lock_cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void thread_update_priority(struct thread *t);
+//patrick
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+///////// For MLFQ Scheduler (Advanced Scheduler) ///////////////////////
+//patrick
+void mlfqs_inc_recent_cpu();
+void mlfqs_update_load_avg_and_recent_cpu();
+void mlfqs_update_priority();
+//patrick
 #endif /* threads/thread.h */
