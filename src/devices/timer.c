@@ -7,7 +7,8 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/thread.c"  /*mariam*/
+
+
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -19,6 +20,11 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
+
+//maro
+static struct list sleep_list;
+//
+
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -37,6 +43,11 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  //maro
+  list_init(&sleep_list);
+  //maro
+
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -86,29 +97,45 @@ timer_elapsed (int64_t then)
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
-void
-timer_sleep (int64_t ticks_to_wait) 
-{
-  int64_t start = timer_ticks ();
 
-  ASSERT (intr_get_level () == INTR_ON);
-  /*while (timer_elapsed (start) < ticks) 
-    thread_yield ();*/
-  struct thread *t=thread_current();  /*mariam*/
-  t->ticks_sleep=ticks+ticks_to_wait;    /*mariam*/
+//maro
+const bool less_ticks(const struct list_elem *a_, const struct list_elem *b_,void *aux UNUSED) { 
+  ASSERT(a_!= NULL);
+  ASSERT(b_!= NULL);
 
-  list_insert_ordered(&sleep_list,&t->sleep_elem,(list_less_func *)&less_ticks,NULL); /*mariam*/
-  t->status=THREAD_BLOCKED;
-  schedule ();
-  
-}
-bool less_ticks(const struct list_elem *a_, const struct list_elem *b_,void *aux UNUSED) { /*mariam*/
 
   struct thread *a = list_entry (a_, struct thread, sleep_elem);
   struct thread *b = list_entry (b_, struct thread, sleep_elem);
   return a->ticks_sleep < b->ticks_sleep;
 }
+//maro
 
+void
+timer_sleep (int64_t ticks) 
+{
+  int64_t start = timer_ticks ();
+
+  ASSERT (intr_get_level () == INTR_ON);
+  //while (timer_elapsed (start) < ticks) 
+  //  thread_yield ();
+
+  //maro
+  if(ticks<=0)
+    return;
+  
+  struct thread *t=thread_current();
+  t->ticks_sleep = ticks + start;
+ 
+  enum intr_level old_level = intr_disable();
+
+  
+  list_insert_ordered(&sleep_list,&t->sleep_elem,(list_less_func *)&less_ticks,NULL);
+  thread_block();
+  
+  intr_set_level(old_level);
+  //maro
+
+}
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
@@ -184,24 +211,42 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+        /*thread_foreach(checkInvoke, NULL);*/
+
   ticks++;
   thread_tick ();
+    //maro
+  struct list_elem *e = list_begin (&sleep_list);
+  struct list_elem *e_next;
 
-  /*mariam*/
-  struct list_elem *e;
-  for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
-       e = list_next (e))
+  while (e != list_end(&sleep_list))
+  {
+    struct thread *t = list_entry(e, struct thread, sleep_elem);
+    e_next = list_next(e);
+    if (t->ticks_sleep > ticks)
+      break;
+    if (t->ticks_sleep == timer_ticks())
     {
-      struct thread *t = list_entry (e, struct thread,sleep_elem );
-      if(t->ticks_sleep>ticks)
-        break;
-      if(t->ticks_sleep ==ticks){
-        list_push_back (&ready_list, &t->elem);
-        list_remove(e);
-      }
+      enum intr_level old_level = intr_disable();
+      thread_unblock(t);
+      list_remove(e);
+      intr_set_level(old_level);
     }
-  /*mariam*/
+    e = e_next;
+  }
+  //maro
 
+
+
+
+  if (thread_mlfqs)
+  {
+    mlfqs_inc_recent_cpu();
+      if (ticks % TIMER_FREQ == 0)
+        mlfqs_update_load_avg_and_recent_cpu();
+      else if (ticks % 4 == 0)
+        mlfqs_update_priority(thread_current());
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

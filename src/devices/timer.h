@@ -3,8 +3,6 @@
 
 #include <round.h>
 #include <stdint.h>
-#include <debug.h> /*mariam*/
-#include<stdbool.h> /*mariam*//////
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
@@ -27,7 +25,5 @@ void timer_udelay (int64_t microseconds);
 void timer_ndelay (int64_t nanoseconds);
 
 void timer_print_stats (void);
-bool less_ticks(const struct list_elem *a_, const struct list_elem *b_,void *aux UNUSED); /*mariam*/
-
 
 #endif /* devices/timer.h */
